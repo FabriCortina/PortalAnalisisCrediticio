@@ -70,4 +70,56 @@ coverage/
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Archivos de compilación
+bin/
+obj/
+
+# Archivos de Visual Studio
+.vs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.dbmdl
+*.jfm
+
+# Archivos de Rider
+.idea/
+*.sln.iml
+
+# Archivos de VS Code
+.vscode/
+*.code-workspace
+
+# Archivos de configuración local
+appsettings.Development.json
+appsettings.Local.json
+
+# Archivos de base de datos
+*.mdf
+*.ldf
+*.ndf
+
+# Archivos de logs
+logs/
+*.log
+
+# Archivos temporales
+*.tmp
+*.temp
+*.swp
+*.*~
+project.lock.json
+.DS_Store
+*.pyc
+nupkg/
+
+# Archivos de cobertura de código
+coverage/
+*.coverage
+*.coveragexml
+
+# Archivos de publicación
+publish/ 
