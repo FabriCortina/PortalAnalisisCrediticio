@@ -33,6 +33,10 @@ builder.Services.AddScoped<IInformacionFinancieraService, InformacionFinancieraS
 builder.Services.AddScoped<IEmpresaService, EmpresaService>();
 builder.Services.AddScoped<IAnalisisRiesgoService, AnalisisRiesgoService>();
 builder.Services.AddScoped<IIntegracionesExternasService, IntegracionesExternasService>();
+builder.Services.AddScoped<IInformeService, InformeService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IFileService, FileService>();
 
 // Registrar DinkToPdf
 builder.Services.AddSingleton(typeof(IConverter), new SynchronizedConverter(new PdfTools()));
