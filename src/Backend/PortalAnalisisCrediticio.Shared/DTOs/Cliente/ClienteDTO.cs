@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using PortalAnalisisCrediticio.Shared.DTOs.Empresa;
-using PortalAnalisisCrediticio.Shared.DTOs.Financiero;
+using PortalAnalisisCrediticio.Shared.DTOs.InformacionFinanciera;
 
 namespace PortalAnalisisCrediticio.Shared.DTOs.Cliente;
 

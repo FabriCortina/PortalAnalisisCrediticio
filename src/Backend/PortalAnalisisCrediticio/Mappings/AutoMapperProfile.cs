@@ -1,0 +1,1 @@
+using PortalAnalisisCrediticio.Shared.DTOs.InformacionFinanciera; 

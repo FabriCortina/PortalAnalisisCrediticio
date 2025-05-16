@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using PortalAnalisisCrediticio.Core.Interfaces;
-using PortalAnalisisCrediticio.Shared.DTOs;
+using PortalAnalisisCrediticio.Shared.DTOs.InformacionFinanciera;
 
 namespace PortalAnalisisCrediticio.API.Controllers;
 

@@ -1,97 +1,314 @@
-using AutoMapper;
 using Microsoft.EntityFrameworkCore;
-using PortalAnalisisCrediticio.Core.Entities;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using PortalAnalisisCrediticio.Core.Domain.Entities;
 using PortalAnalisisCrediticio.Core.Interfaces;
 using PortalAnalisisCrediticio.Infrastructure.Data;
-using PortalAnalisisCrediticio.Shared.DTOs;
+using PortalAnalisisCrediticio.Shared.DTOs.SolicitudProducto;
 
 namespace PortalAnalisisCrediticio.Infrastructure.Services;
 
-public class SolicitudProductoService : BaseService<SolicitudProducto, SolicitudProductoDTO>, ISolicitudProductoService
+public class SolicitudProductoService : ISolicitudProductoService
 {
-    public SolicitudProductoService(ApplicationDbContext context, IMapper mapper) : base(context, mapper)
+    private readonly ILogger<SolicitudProductoService> _logger;
+    private readonly IMemoryCache _cache;
+    private readonly ApplicationDbContext _context;
+    private const int CacheDurationMinutes = 60;
+
+    public SolicitudProductoService(
+        ILogger<SolicitudProductoService> logger,
+        IMemoryCache cache,
+        ApplicationDbContext context)
     {
+        _logger = logger;
+        _cache = cache;
+        _context = context;
+    }
+
+    public async Task<IEnumerable<SolicitudProductoDTO>> GetAllAsync()
+    {
+        var cacheKey = "SolicitudesProducto_All";
+        if (!_cache.TryGetValue(cacheKey, out IEnumerable<SolicitudProductoDTO> solicitudes))
+        {
+            solicitudes = await _context.SolicitudesProducto
+                .Include(s => s.Cliente)
+                .Include(s => s.ProductoSolicitudes)
+                    .ThenInclude(ps => ps.Producto)
+                .Select(s => new SolicitudProductoDTO
+                {
+                    Id = s.Id,
+                    ClienteId = s.ClienteId,
+                    ClienteNombre = s.Cliente.Nombre,
+                    FechaSolicitud = s.FechaSolicitud,
+                    MontoTotal = s.MontoTotal,
+                    Estado = s.Estado,
+                    PagoInicial = s.PagoInicial,
+                    PorcentajeFinanciacion = s.PorcentajeFinanciacion,
+                    CantidadCuotas = s.CantidadCuotas,
+                    MontoFinanciado = s.MontoFinanciado,
+                    MontoCuota = s.MontoCuota,
+                    Observaciones = s.Observaciones,
+                    Productos = s.ProductoSolicitudes.Select(ps => new ProductoSolicitudDTO
+                    {
+                        Id = ps.Id,
+                        ProductoId = ps.ProductoId,
+                        ProductoNombre = ps.Producto.Nombre,
+                        ProductoCodigoInterno = ps.Producto.CodigoInterno,
+                        PrecioUnitario = ps.Producto.PrecioUnitario,
+                        Moneda = ps.Producto.Moneda,
+                        Cantidad = ps.Cantidad,
+                        Subtotal = ps.Subtotal
+                    }).ToList()
+                })
+                .ToListAsync();
+
+            _cache.Set(cacheKey, solicitudes, TimeSpan.FromMinutes(CacheDurationMinutes));
+        }
+
+        return solicitudes;
+    }
+
+    public async Task<SolicitudProductoDTO> GetByIdAsync(int id)
+    {
+        var cacheKey = $"SolicitudProducto_{id}";
+        if (!_cache.TryGetValue(cacheKey, out SolicitudProductoDTO solicitud))
+        {
+            solicitud = await _context.SolicitudesProducto
+                .Include(s => s.Cliente)
+                .Include(s => s.ProductoSolicitudes)
+                    .ThenInclude(ps => ps.Producto)
+                .Where(s => s.Id == id)
+                .Select(s => new SolicitudProductoDTO
+                {
+                    Id = s.Id,
+                    ClienteId = s.ClienteId,
+                    ClienteNombre = s.Cliente.Nombre,
+                    FechaSolicitud = s.FechaSolicitud,
+                    MontoTotal = s.MontoTotal,
+                    Estado = s.Estado,
+                    PagoInicial = s.PagoInicial,
+                    PorcentajeFinanciacion = s.PorcentajeFinanciacion,
+                    CantidadCuotas = s.CantidadCuotas,
+                    MontoFinanciado = s.MontoFinanciado,
+                    MontoCuota = s.MontoCuota,
+                    Observaciones = s.Observaciones,
+                    Productos = s.ProductoSolicitudes.Select(ps => new ProductoSolicitudDTO
+                    {
+                        Id = ps.Id,
+                        ProductoId = ps.ProductoId,
+                        ProductoNombre = ps.Producto.Nombre,
+                        ProductoCodigoInterno = ps.Producto.CodigoInterno,
+                        PrecioUnitario = ps.Producto.PrecioUnitario,
+                        Moneda = ps.Producto.Moneda,
+                        Cantidad = ps.Cantidad,
+                        Subtotal = ps.Subtotal
+                    }).ToList()
+                })
+                .FirstOrDefaultAsync();
+
+            if (solicitud != null)
+            {
+                _cache.Set(cacheKey, solicitud, TimeSpan.FromMinutes(CacheDurationMinutes));
+            }
+        }
+
+        return solicitud;
     }
 
     public async Task<IEnumerable<SolicitudProductoDTO>> GetByClienteIdAsync(int clienteId)
     {
-        var solicitudes = await _dbSet
-            .Where(s => s.ClienteId == clienteId)
-            .OrderByDescending(s => s.FechaSolicitud)
-            .ToListAsync();
+        var cacheKey = $"SolicitudesProducto_Cliente_{clienteId}";
+        if (!_cache.TryGetValue(cacheKey, out IEnumerable<SolicitudProductoDTO> solicitudes))
+        {
+            solicitudes = await _context.SolicitudesProducto
+                .Include(s => s.Cliente)
+                .Include(s => s.ProductoSolicitudes)
+                    .ThenInclude(ps => ps.Producto)
+                .Where(s => s.ClienteId == clienteId)
+                .Select(s => new SolicitudProductoDTO
+                {
+                    Id = s.Id,
+                    ClienteId = s.ClienteId,
+                    ClienteNombre = s.Cliente.Nombre,
+                    FechaSolicitud = s.FechaSolicitud,
+                    MontoTotal = s.MontoTotal,
+                    Estado = s.Estado,
+                    PagoInicial = s.PagoInicial,
+                    PorcentajeFinanciacion = s.PorcentajeFinanciacion,
+                    CantidadCuotas = s.CantidadCuotas,
+                    MontoFinanciado = s.MontoFinanciado,
+                    MontoCuota = s.MontoCuota,
+                    Observaciones = s.Observaciones,
+                    Productos = s.ProductoSolicitudes.Select(ps => new ProductoSolicitudDTO
+                    {
+                        Id = ps.Id,
+                        ProductoId = ps.ProductoId,
+                        ProductoNombre = ps.Producto.Nombre,
+                        ProductoCodigoInterno = ps.Producto.CodigoInterno,
+                        PrecioUnitario = ps.Producto.PrecioUnitario,
+                        Moneda = ps.Producto.Moneda,
+                        Cantidad = ps.Cantidad,
+                        Subtotal = ps.Subtotal
+                    }).ToList()
+                })
+                .ToListAsync();
 
-        return _mapper.Map<IEnumerable<SolicitudProductoDTO>>(solicitudes);
+            _cache.Set(cacheKey, solicitudes, TimeSpan.FromMinutes(CacheDurationMinutes));
+        }
+
+        return solicitudes;
     }
 
-    public async Task<SolicitudProductoDTO> CreateAsync(CreateSolicitudProductoDTO solicitudDto)
+    public async Task<SolicitudProductoDTO> CreateAsync(CreateSolicitudProductoDTO dto)
     {
-        var solicitud = _mapper.Map<SolicitudProducto>(solicitudDto);
-        solicitud.FechaSolicitud = DateTime.Now;
-        solicitud.Estado = "Pendiente";
+        try
+        {
+            var cliente = await _context.Clientes.FindAsync(dto.ClienteId);
+            if (cliente == null)
+            {
+                throw new ArgumentException($"No se encontró el cliente con ID {dto.ClienteId}");
+            }
 
-        // Validar que el cliente exista
-        var cliente = await _context.Clientes.FindAsync(solicitud.ClienteId);
-        if (cliente == null)
-            throw new ArgumentException("El cliente no existe");
+            var solicitud = new SolicitudProducto
+            {
+                ClienteId = dto.ClienteId,
+                FechaSolicitud = dto.FechaSolicitud,
+                MontoTotal = dto.MontoTotal,
+                Estado = dto.Estado,
+                PagoInicial = dto.PagoInicial,
+                PorcentajeFinanciacion = dto.PorcentajeFinanciacion,
+                CantidadCuotas = dto.CantidadCuotas,
+                MontoFinanciado = dto.MontoFinanciado,
+                MontoCuota = dto.MontoCuota,
+                Observaciones = dto.Observaciones,
+                ProductoSolicitudes = dto.Productos.Select(p => new ProductoSolicitud
+                {
+                    ProductoId = p.ProductoId,
+                    Cantidad = p.Cantidad,
+                    Subtotal = p.Subtotal
+                }).ToList()
+            };
 
-        // Validar que el pago inicial no sea mayor al monto total
-        if (solicitud.PagoInicial > solicitud.MontoTotal)
-            throw new ArgumentException("El pago inicial no puede ser mayor al monto total");
+            _context.SolicitudesProducto.Add(solicitud);
+            await _context.SaveChangesAsync();
 
-        // Validar que el porcentaje de financiación sea coherente con el pago inicial
-        var montoFinanciado = solicitud.MontoTotal - solicitud.PagoInicial;
-        var porcentajeCalculado = (montoFinanciado / solicitud.MontoTotal) * 100;
-        if (Math.Abs(porcentajeCalculado - solicitud.PorcentajeFinanciacion) > 0.01m)
-            throw new ArgumentException("El porcentaje de financiación no coincide con el pago inicial");
+            InvalidateCache();
 
-        _dbSet.Add(solicitud);
-        await _context.SaveChangesAsync();
-
-        return _mapper.Map<SolicitudProductoDTO>(solicitud);
+            return await GetByIdAsync(solicitud.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al crear la solicitud de producto");
+            throw;
+        }
     }
 
-    public async Task<SolicitudProductoDTO> UpdateAsync(int id, UpdateSolicitudProductoDTO solicitudDto)
+    public async Task<SolicitudProductoDTO> UpdateAsync(int id, CreateSolicitudProductoDTO dto)
     {
-        var solicitud = await _dbSet.FindAsync(id);
-        if (solicitud == null)
-            return null;
+        try
+        {
+            var solicitud = await _context.SolicitudesProducto
+                .Include(s => s.ProductoSolicitudes)
+                .FirstOrDefaultAsync(s => s.Id == id);
 
-        _mapper.Map(solicitudDto, solicitud);
+            if (solicitud == null)
+            {
+                throw new ArgumentException($"No se encontró la solicitud con ID {id}");
+            }
 
-        // Validar que el pago inicial no sea mayor al monto total
-        if (solicitud.PagoInicial > solicitud.MontoTotal)
-            throw new ArgumentException("El pago inicial no puede ser mayor al monto total");
+            var cliente = await _context.Clientes.FindAsync(dto.ClienteId);
+            if (cliente == null)
+            {
+                throw new ArgumentException($"No se encontró el cliente con ID {dto.ClienteId}");
+            }
 
-        // Validar que el porcentaje de financiación sea coherente con el pago inicial
-        var montoFinanciado = solicitud.MontoTotal - solicitud.PagoInicial;
-        var porcentajeCalculado = (montoFinanciado / solicitud.MontoTotal) * 100;
-        if (Math.Abs(porcentajeCalculado - solicitud.PorcentajeFinanciacion) > 0.01m)
-            throw new ArgumentException("El porcentaje de financiación no coincide con el pago inicial");
+            solicitud.ClienteId = dto.ClienteId;
+            solicitud.FechaSolicitud = dto.FechaSolicitud;
+            solicitud.MontoTotal = dto.MontoTotal;
+            solicitud.Estado = dto.Estado;
+            solicitud.PagoInicial = dto.PagoInicial;
+            solicitud.PorcentajeFinanciacion = dto.PorcentajeFinanciacion;
+            solicitud.CantidadCuotas = dto.CantidadCuotas;
+            solicitud.MontoFinanciado = dto.MontoFinanciado;
+            solicitud.MontoCuota = dto.MontoCuota;
+            solicitud.Observaciones = dto.Observaciones;
 
-        await _context.SaveChangesAsync();
+            // Actualizar productos
+            _context.ProductoSolicitudes.RemoveRange(solicitud.ProductoSolicitudes);
+            solicitud.ProductoSolicitudes = dto.Productos.Select(p => new ProductoSolicitud
+            {
+                ProductoId = p.ProductoId,
+                Cantidad = p.Cantidad,
+                Subtotal = p.Subtotal
+            }).ToList();
 
-        return _mapper.Map<SolicitudProductoDTO>(solicitud);
+            await _context.SaveChangesAsync();
+
+            InvalidateCache();
+
+            return await GetByIdAsync(solicitud.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar la solicitud de producto");
+            throw;
+        }
     }
 
-    public async Task<IEnumerable<SolicitudProductoDTO>> GetPendientesAsync()
+    public async Task DeleteAsync(int id)
     {
-        var solicitudes = await _dbSet
-            .Where(s => s.Estado == "Pendiente")
-            .OrderByDescending(s => s.FechaSolicitud)
-            .ToListAsync();
+        try
+        {
+            var solicitud = await _context.SolicitudesProducto
+                .Include(s => s.ProductoSolicitudes)
+                .FirstOrDefaultAsync(s => s.Id == id);
 
-        return _mapper.Map<IEnumerable<SolicitudProductoDTO>>(solicitudes);
+            if (solicitud == null)
+            {
+                throw new ArgumentException($"No se encontró la solicitud con ID {id}");
+            }
+
+            _context.ProductoSolicitudes.RemoveRange(solicitud.ProductoSolicitudes);
+            _context.SolicitudesProducto.Remove(solicitud);
+            await _context.SaveChangesAsync();
+
+            InvalidateCache();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar la solicitud de producto");
+            throw;
+        }
     }
 
     public async Task<SolicitudProductoDTO> CambiarEstadoAsync(int id, string nuevoEstado)
     {
-        var solicitud = await _dbSet.FindAsync(id);
-        if (solicitud == null)
-            return null;
+        try
+        {
+            var solicitud = await _context.SolicitudesProducto.FindAsync(id);
+            if (solicitud == null)
+            {
+                throw new ArgumentException($"No se encontró la solicitud con ID {id}");
+            }
 
-        solicitud.Estado = nuevoEstado;
-        await _context.SaveChangesAsync();
+            solicitud.Estado = nuevoEstado;
+            await _context.SaveChangesAsync();
 
-        return _mapper.Map<SolicitudProductoDTO>(solicitud);
+            InvalidateCache();
+
+            return await GetByIdAsync(solicitud.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al cambiar el estado de la solicitud de producto");
+            throw;
+        }
+    }
+
+    private void InvalidateCache()
+    {
+        _cache.Remove("SolicitudesProducto_All");
+        _cache.Remove("SolicitudesProducto_Cliente_*");
+        _cache.Remove("SolicitudProducto_*");
     }
 } 

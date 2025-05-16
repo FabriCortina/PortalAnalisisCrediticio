@@ -1,29 +1,44 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PortalAnalisisCrediticio.Core.Domain.Entities
 {
     public class Cliente
     {
+        [Key]
         public int Id { get; set; }
 
         [Required]
-        [MaxLength(100)]
+        [StringLength(100)]
         public string Nombre { get; set; }
 
         [Required]
-        [MaxLength(100)]
-        public string Apellido { get; set; }
+        [StringLength(20)]
+        public string CUIT_CUIL { get; set; }
 
         [Required]
-        [MaxLength(11)]
-        public string CUIT { get; set; }
+        [StringLength(20)]
+        public string TipoDocumento { get; set; }
 
-        [MaxLength(100)]
+        [Required]
+        [StringLength(200)]
+        public string Direccion { get; set; }
+
+        [StringLength(20)]
+        public string Telefono { get; set; }
+
+        [Required]
+        [StringLength(100)]
+        [EmailAddress]
         public string Email { get; set; }
 
-        [MaxLength(20)]
-        public string Telefono { get; set; }
+        public DateTime FechaCreacion { get; set; }
+        public DateTime? FechaActualizacion { get; set; }
+
+        // Relación muchos a muchos con Compañía
+        public ICollection<ClienteCompania> ClienteCompanias { get; set; }
 
         // Relaciones
         public InformacionFinanciera InformacionFinanciera { get; set; }

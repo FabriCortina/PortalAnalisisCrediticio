@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -24,6 +25,10 @@ public class FlujoCajaProyectado
     [Required]
     [Column(TypeName = "decimal(18,2)")]
     public decimal Saldo { get; set; }
+
+    public string Moneda { get; set; }
+
+    public string Observaciones { get; set; }
 
     // Relaciones
     public InformacionFinanciera InformacionFinanciera { get; set; }

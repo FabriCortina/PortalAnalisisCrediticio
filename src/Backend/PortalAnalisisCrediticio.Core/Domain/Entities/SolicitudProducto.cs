@@ -47,6 +47,11 @@ public class SolicitudProducto
     [Column(TypeName = "decimal(18,2)")]
     public decimal MontoCuota { get; set; }
 
+    [MaxLength(500)]
+    public string? Observaciones { get; set; }
+
     // Relaciones
     public Cliente Cliente { get; set; }
+    public ICollection<ProductoSolicitud> ProductoSolicitudes { get; set; }
+    public CondicionPago CondicionPago { get; set; }
 } 

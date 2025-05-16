@@ -1,6 +1,9 @@
 using AutoMapper;
 using PortalAnalisisCrediticio.Core.Entities;
 using PortalAnalisisCrediticio.Shared.DTOs;
+using PortalAnalisisCrediticio.Shared.DTOs.Empresa;
+using PortalAnalisisCrediticio.Shared.DTOs.Producto;
+using PortalAnalisisCrediticio.Shared.DTOs.InformacionFinanciera;
 
 namespace PortalAnalisisCrediticio.Infrastructure.Mappings
 {
@@ -47,6 +50,12 @@ namespace PortalAnalisisCrediticio.Infrastructure.Mappings
                 .ForMember(dest => dest.ClienteEmpresas, opt => opt.MapFrom(src => src.ClienteEmpresas));
             CreateMap<EmpresaDTO, Empresa>()
                 .ForMember(dest => dest.ClienteEmpresas, opt => opt.MapFrom(src => src.ClienteEmpresas));
+
+            // Mapeos de SolicitudProducto
+            CreateMap<SolicitudProducto, SolicitudProductoDTO>();
+            CreateMap<SolicitudProductoDTO, SolicitudProducto>();
+            CreateMap<CreateSolicitudProductoDTO, SolicitudProducto>();
+            CreateMap<UpdateSolicitudProductoDTO, SolicitudProducto>();
         }
     }
 } 

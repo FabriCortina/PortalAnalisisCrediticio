@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -23,6 +24,15 @@ public class InformacionFinanciera
     [Column(TypeName = "decimal(18,2)")]
     public decimal PatrimonioNeto { get; set; }
 
+    [Required]
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal CapacidadPago { get; set; }
+
+    [Required]
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal RatioEndeudamiento { get; set; }
+
+    [Required]
     // Relaciones
     public Cliente Cliente { get; set; }
     public ICollection<EstadoFinanciero> EstadosFinancieros { get; set; }

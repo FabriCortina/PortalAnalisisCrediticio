@@ -1,4 +1,4 @@
-using PortalAnalisisCrediticio.Shared.DTOs;
+using PortalAnalisisCrediticio.Shared.DTOs.InformacionFinanciera;
 
 namespace PortalAnalisisCrediticio.Core.Interfaces;
 
@@ -14,4 +14,7 @@ public interface IInformacionFinancieraService
     Task<EstadoFinancieroDTO> AddEstadoFinancieroAsync(int clienteId, EstadoFinancieroDTO estadoDto);
     Task<FlujoCajaProyectadoDTO> AddFlujoCajaAsync(int clienteId, FlujoCajaProyectadoDTO flujoDto);
     Task<DeudaDTO> AddDeudaAsync(int clienteId, DeudaDTO deudaDto);
+    Task<EstadoFinancieroDTO> GetEstadoFinancieroAsync(int clienteId);
+    Task<FlujoCajaProyectadoDTO> GetFlujoCajaProyectadoAsync(int clienteId);
+    Task<DeudaDTO> GetDeudaAsync(int clienteId);
 } 
