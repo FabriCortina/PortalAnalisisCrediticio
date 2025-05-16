@@ -145,5 +145,12 @@ namespace PortalAnalisisCrediticio.API.Controllers
             return File(bytes, "text/csv", 
                 $"metricas-{fechaInicio:yyyyMMdd}-{fechaFin:yyyyMMdd}.csv");
         }
+
+        [HttpGet("admin")]
+        public async Task<ActionResult<DashboardAdminDTO>> GetDashboardAdmin()
+        {
+            var dashboardAdmin = await _dashboardService.ObtenerDashboardAdminAsync();
+            return Ok(dashboardAdmin);
+        }
     }
 } 

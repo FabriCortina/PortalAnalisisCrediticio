@@ -13,5 +13,6 @@ namespace PortalAnalisisCrediticio.Core.Interfaces
         Task<List<CreditoVencidoDTO>> ObtenerCreditosVencidosAsync();
         Task<MetricasDTO> ObtenerMetricasAsync();
         Task<List<ActividadDTO>> ObtenerActividadesRecientesAsync();
+        Task<DashboardAdminDTO> ObtenerDashboardAdminAsync();
     }
 } 

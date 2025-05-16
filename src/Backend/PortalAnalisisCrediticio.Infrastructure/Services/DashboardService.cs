@@ -274,5 +274,48 @@ namespace PortalAnalisisCrediticio.Infrastructure.Services
                 throw;
             }
         }
+
+        public async Task<DashboardAdminDTO> ObtenerDashboardAdminAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Iniciando obtención de dashboard administrativo");
+
+                var cacheKey = "dashboard_admin";
+                if (_cache.TryGetValue(cacheKey, out DashboardAdminDTO cachedDashboard))
+                {
+                    _logger.LogInformation("Retornando dashboard administrativo desde caché");
+                    return cachedDashboard;
+                }
+
+                var totalClientes = await _context.Clientes.CountAsync();
+                var totalSolicitudes = await _context.Solicitudes.CountAsync();
+                var creditosActivos = await _context.Creditos.CountAsync(c => c.Estado == "Activo");
+                var creditosVencidos = await _context.Creditos.CountAsync(c => c.Estado == "Vencido");
+                var distribucionRiesgos = await _context.Clientes
+                    .GroupBy(c => c.NivelRiesgo)
+                    .Select(g => new { NivelRiesgo = g.Key, Cantidad = g.Count() })
+                    .ToListAsync();
+
+                var dashboardAdmin = new DashboardAdminDTO
+                {
+                    TotalClientes = totalClientes,
+                    TotalSolicitudes = totalSolicitudes,
+                    CreditosActivos = creditosActivos,
+                    CreditosVencidos = creditosVencidos,
+                    DistribucionRiesgos = distribucionRiesgos.ToDictionary(d => d.NivelRiesgo, d => d.Cantidad)
+                };
+
+                _cache.Set(cacheKey, dashboardAdmin, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
+                _logger.LogInformation("Dashboard administrativo generado y almacenado en caché");
+
+                return dashboardAdmin;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al obtener dashboard administrativo");
+                throw;
+            }
+        }
     }
 } 
