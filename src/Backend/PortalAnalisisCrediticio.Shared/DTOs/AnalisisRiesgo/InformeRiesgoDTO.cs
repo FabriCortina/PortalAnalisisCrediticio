@@ -1,4 +1,6 @@
+using System;
 using System.ComponentModel.DataAnnotations;
+using PortalAnalisisCrediticio.Shared.DTOs.Cliente;
 
 namespace PortalAnalisisCrediticio.Shared.DTOs.AnalisisRiesgo;
 

@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
 using PortalAnalisisCrediticio.Core.Interfaces;
 using PortalAnalisisCrediticio.Infrastructure.Data;
 using PortalAnalisisCrediticio.Shared.DTOs.AnalisisRiesgo;
 using PortalAnalisisCrediticio.Shared.DTOs.Integraciones;
 using DinkToPdf;
 using DinkToPdf.Contracts;
+using PortalAnalisisCrediticio.Core.Domain.Entities;
 
 namespace PortalAnalisisCrediticio.Infrastructure.Services;
 
@@ -13,237 +16,336 @@ public class AnalisisRiesgoService : IAnalisisRiesgoService
     private readonly ApplicationDbContext _context;
     private readonly IIntegracionesExternasService _integracionesService;
     private readonly IConverter _converter;
+    private readonly ILogger<AnalisisRiesgoService> _logger;
+    private readonly IMemoryCache _cache;
+    private const double PESO_HISTORIAL_PAGOS = 0.3;
+    private const double PESO_SITUACION_FINANCIERA = 0.3;
+    private const double PESO_INFORMES_EXTERNOS = 0.25;
+    private const double PESO_GARANTIAS = 0.15;
+    private const int CACHE_DURATION_MINUTES = 60;
 
     public AnalisisRiesgoService(
         ApplicationDbContext context,
         IIntegracionesExternasService integracionesService,
-        IConverter converter)
+        IConverter converter,
+        ILogger<AnalisisRiesgoService> logger,
+        IMemoryCache cache)
     {
         _context = context;
         _integracionesService = integracionesService;
         _converter = converter;
+        _logger = logger;
+        _cache = cache;
     }
 
     public async Task<InformeRiesgoDTO> RealizarAnalisisRiesgoAsync(int clienteId)
     {
-        // Obtener información del cliente
-        var cliente = await _context.Clientes
-            .Include(c => c.InformacionFinanciera)
-            .Include(c => c.Deudas)
-            .FirstOrDefaultAsync(c => c.Id == clienteId);
-
-        if (cliente == null)
-            throw new Exception("Cliente no encontrado");
-
-        // Obtener informes externos
-        var informeNosis = await _integracionesService.GetInformeNosisAsync(clienteId);
-        var informeVeraz = await _integracionesService.GetInformeVerazAsync(clienteId);
-        var informeBCRA = await _integracionesService.GetInformeBCRAAsync(clienteId);
-        var informeAFIP = await _integracionesService.GetInformeAFIPAsync(clienteId);
-
-        // Calcular scores individuales
-        var scoreHistorialPagos = CalcularScoreHistorialPagos(cliente.Deudas);
-        var scoreSituacionFinanciera = CalcularScoreSituacionFinanciera(cliente.InformacionFinanciera);
-        var scoreInformesExternos = CalcularScoreInformesExternos(informeNosis, informeVeraz, informeBCRA, informeAFIP);
-        var scoreGarantias = CalcularScoreGarantias(cliente);
-
-        // Calcular score total y nivel de riesgo
-        var scoreTotal = (scoreHistorialPagos + scoreSituacionFinanciera + scoreInformesExternos + scoreGarantias) / 4;
-        var nivelRiesgo = DeterminarNivelRiesgo(scoreTotal);
-
-        // Crear informe
-        var informe = new InformeRiesgoDTO
+        try
         {
-            ClienteId = clienteId,
-            NivelRiesgo = nivelRiesgo,
-            ScoreHistorialPagos = scoreHistorialPagos,
-            ScoreSituacionFinanciera = scoreSituacionFinanciera,
-            ScoreInformesExternos = scoreInformesExternos,
-            ScoreGarantias = scoreGarantias,
-            ScoreTotal = scoreTotal,
-            Justificacion = GenerarJustificacion(nivelRiesgo, scoreTotal),
-            RecomendacionOtorgarCredito = DeterminarRecomendacion(nivelRiesgo),
-            TasaInteresSugerida = CalcularTasaInteres(nivelRiesgo),
-            GarantiasAdicionalesSugeridas = DeterminarGarantiasAdicionales(nivelRiesgo),
-            PlazoMaximoSugerido = DeterminarPlazoMaximo(nivelRiesgo),
-            FechaAnalisis = DateTime.Now
-        };
+            _logger.LogInformation($"Iniciando análisis de riesgo para el cliente {clienteId}");
 
-        // Guardar informe en la base de datos
-        var informeEntity = new InformeRiesgo
+            // Verificar caché
+            var cacheKey = $"analisis_riesgo_{clienteId}";
+            if (_cache.TryGetValue(cacheKey, out InformeRiesgoDTO informeCache))
+            {
+                _logger.LogInformation($"Retornando análisis de riesgo desde caché para el cliente {clienteId}");
+                return informeCache;
+            }
+
+            // Obtener información del cliente con todas las relaciones necesarias
+            var cliente = await _context.Clientes
+                .Include(c => c.InformacionFinanciera)
+                .Include(c => c.Deudas)
+                .Include(c => c.Garantias)
+                .FirstOrDefaultAsync(c => c.Id == clienteId);
+
+            if (cliente == null)
+            {
+                _logger.LogWarning($"Cliente {clienteId} no encontrado");
+                throw new Exception($"Cliente {clienteId} no encontrado");
+            }
+
+            // Validar información financiera
+            if (cliente.InformacionFinanciera == null)
+            {
+                _logger.LogWarning($"Información financiera no disponible para el cliente {clienteId}");
+                throw new Exception("Información financiera no disponible");
+            }
+
+            // Obtener informes externos en paralelo con timeout
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var tareasInformes = new[]
+            {
+                _integracionesService.GetInformeNosisAsync(clienteId),
+                _integracionesService.GetInformeVerazAsync(clienteId),
+                _integracionesService.GetInformeBCRAAsync(clienteId),
+                _integracionesService.GetInformeAFIPAsync(clienteId)
+            };
+
+            var informes = await Task.WhenAll(tareasInformes);
+            var informeNosis = informes[0];
+            var informeVeraz = informes[1];
+            var informeBCRA = informes[2];
+            var informeAFIP = informes[3];
+
+            // Calcular scores individuales con validaciones
+            var scoreHistorialPagos = CalcularScoreHistorialPagos(cliente.Deudas);
+            var scoreSituacionFinanciera = CalcularScoreSituacionFinanciera(cliente.InformacionFinanciera);
+            var scoreInformesExternos = CalcularScoreInformesExternos(informeNosis, informeVeraz, informeBCRA, informeAFIP);
+            var scoreGarantias = CalcularScoreGarantias(cliente);
+
+            // Calcular score total ponderado
+            var scoreTotal = (scoreHistorialPagos * PESO_HISTORIAL_PAGOS) +
+                            (scoreSituacionFinanciera * PESO_SITUACION_FINANCIERA) +
+                            (scoreInformesExternos * PESO_INFORMES_EXTERNOS) +
+                            (scoreGarantias * PESO_GARANTIAS);
+
+            var nivelRiesgo = DeterminarNivelRiesgo(scoreTotal);
+
+            // Crear informe
+            var informe = new InformeRiesgoDTO
+            {
+                ClienteId = clienteId,
+                NivelRiesgo = nivelRiesgo,
+                ScoreHistorialPagos = scoreHistorialPagos,
+                ScoreSituacionFinanciera = scoreSituacionFinanciera,
+                ScoreInformesExternos = scoreInformesExternos,
+                ScoreGarantias = scoreGarantias,
+                ScoreTotal = scoreTotal,
+                Justificacion = GenerarJustificacion(nivelRiesgo, scoreTotal),
+                RecomendacionOtorgarCredito = DeterminarRecomendacion(nivelRiesgo),
+                TasaInteresSugerida = CalcularTasaInteres(nivelRiesgo),
+                GarantiasAdicionalesSugeridas = DeterminarGarantiasAdicionales(nivelRiesgo),
+                PlazoMaximoSugerido = DeterminarPlazoMaximo(nivelRiesgo),
+                FechaAnalisis = DateTime.UtcNow
+            };
+
+            // Guardar informe en la base de datos
+            var informeEntity = new InformeRiesgo
+            {
+                ClienteId = clienteId,
+                NivelRiesgo = informe.NivelRiesgo,
+                Justificacion = informe.Justificacion,
+                RecomendacionOtorgarCredito = informe.RecomendacionOtorgarCredito,
+                TasaInteresSugerida = informe.TasaInteresSugerida,
+                GarantiasAdicionalesSugeridas = informe.GarantiasAdicionalesSugeridas,
+                PlazoMaximoSugerido = informe.PlazoMaximoSugerido,
+                ScoreHistorialPagos = informe.ScoreHistorialPagos,
+                ScoreSituacionFinanciera = informe.ScoreSituacionFinanciera,
+                ScoreInformesExternos = informe.ScoreInformesExternos,
+                ScoreGarantias = informe.ScoreGarantias,
+                ScoreTotal = informe.ScoreTotal,
+                FechaAnalisis = informe.FechaAnalisis
+            };
+
+            _context.InformesRiesgo.Add(informeEntity);
+            await _context.SaveChangesAsync();
+
+            // Guardar en caché
+            _cache.Set(cacheKey, informe, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
+
+            _logger.LogInformation($"Análisis de riesgo completado para el cliente {clienteId}. Nivel de riesgo: {nivelRiesgo}");
+            return informe;
+        }
+        catch (Exception ex)
         {
-            ClienteId = clienteId,
-            NivelRiesgo = informe.NivelRiesgo,
-            Justificacion = informe.Justificacion,
-            RecomendacionOtorgarCredito = informe.RecomendacionOtorgarCredito,
-            TasaInteresSugerida = informe.TasaInteresSugerida,
-            GarantiasAdicionalesSugeridas = informe.GarantiasAdicionalesSugeridas,
-            PlazoMaximoSugerido = informe.PlazoMaximoSugerido,
-            ScoreHistorialPagos = informe.ScoreHistorialPagos,
-            ScoreSituacionFinanciera = informe.ScoreSituacionFinanciera,
-            ScoreInformesExternos = informe.ScoreInformesExternos,
-            ScoreGarantias = informe.ScoreGarantias,
-            ScoreTotal = informe.ScoreTotal,
-            FechaAnalisis = informe.FechaAnalisis
-        };
-
-        _context.InformesRiesgo.Add(informeEntity);
-        await _context.SaveChangesAsync();
-
-        return informe;
+            _logger.LogError(ex, $"Error al realizar análisis de riesgo para el cliente {clienteId}");
+            throw new Exception($"Error al realizar análisis de riesgo: {ex.Message}", ex);
+        }
     }
 
     public async Task<InformeRiesgoDTO> GetInformeRiesgoAsync(int clienteId)
     {
-        var informe = await _context.InformesRiesgo
-            .Where(i => i.ClienteId == clienteId)
-            .OrderByDescending(i => i.FechaAnalisis)
-            .FirstOrDefaultAsync();
-
-        if (informe == null)
-            throw new Exception("No se encontró un informe de riesgo para el cliente");
-
-        return new InformeRiesgoDTO
+        try
         {
-            Id = informe.Id,
-            ClienteId = informe.ClienteId,
-            NivelRiesgo = informe.NivelRiesgo,
-            Justificacion = informe.Justificacion,
-            RecomendacionOtorgarCredito = informe.RecomendacionOtorgarCredito,
-            TasaInteresSugerida = informe.TasaInteresSugerida,
-            GarantiasAdicionalesSugeridas = informe.GarantiasAdicionalesSugeridas,
-            PlazoMaximoSugerido = informe.PlazoMaximoSugerido,
-            ScoreHistorialPagos = informe.ScoreHistorialPagos,
-            ScoreSituacionFinanciera = informe.ScoreSituacionFinanciera,
-            ScoreInformesExternos = informe.ScoreInformesExternos,
-            ScoreGarantias = informe.ScoreGarantias,
-            ScoreTotal = informe.ScoreTotal,
-            FechaAnalisis = informe.FechaAnalisis
-        };
+            _logger.LogInformation($"Obteniendo informe de riesgo para el cliente {clienteId}");
+
+            // Verificar caché
+            var cacheKey = $"informe_riesgo_{clienteId}";
+            if (_cache.TryGetValue(cacheKey, out InformeRiesgoDTO informeCache))
+            {
+                _logger.LogInformation($"Retornando informe de riesgo desde caché para el cliente {clienteId}");
+                return informeCache;
+            }
+
+            var informe = await _context.InformesRiesgo
+                .Where(i => i.ClienteId == clienteId)
+                .OrderByDescending(i => i.FechaAnalisis)
+                .FirstOrDefaultAsync();
+
+            if (informe == null)
+            {
+                _logger.LogWarning($"No se encontró informe de riesgo para el cliente {clienteId}");
+                throw new Exception($"No se encontró informe de riesgo para el cliente {clienteId}");
+            }
+
+            var informeDTO = new InformeRiesgoDTO
+            {
+                Id = informe.Id,
+                ClienteId = informe.ClienteId,
+                NivelRiesgo = informe.NivelRiesgo,
+                Justificacion = informe.Justificacion,
+                RecomendacionOtorgarCredito = informe.RecomendacionOtorgarCredito,
+                TasaInteresSugerida = informe.TasaInteresSugerida,
+                GarantiasAdicionalesSugeridas = informe.GarantiasAdicionalesSugeridas,
+                PlazoMaximoSugerido = informe.PlazoMaximoSugerido,
+                ScoreHistorialPagos = informe.ScoreHistorialPagos,
+                ScoreSituacionFinanciera = informe.ScoreSituacionFinanciera,
+                ScoreInformesExternos = informe.ScoreInformesExternos,
+                ScoreGarantias = informe.ScoreGarantias,
+                ScoreTotal = informe.ScoreTotal,
+                FechaAnalisis = informe.FechaAnalisis
+            };
+
+            // Guardar en caché
+            _cache.Set(cacheKey, informeDTO, TimeSpan.FromMinutes(CACHE_DURATION_MINUTES));
+
+            _logger.LogInformation($"Informe de riesgo obtenido exitosamente para el cliente {clienteId}");
+            return informeDTO;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error al obtener informe de riesgo para el cliente {clienteId}");
+            throw new Exception($"Error al obtener informe de riesgo: {ex.Message}", ex);
+        }
     }
 
     public async Task<byte[]> ExportarInformePDFAsync(int clienteId)
     {
-        var informe = await GetInformeRiesgoAsync(clienteId);
-        var cliente = await _context.Clientes
-            .Include(c => c.InformacionFinanciera)
-            .FirstOrDefaultAsync(c => c.Id == clienteId);
-
-        if (cliente == null)
-            throw new Exception("Cliente no encontrado");
-
-        // Crear el HTML del informe
-        var html = $@"
-            <html>
-            <head>
-                <meta charset='utf-8'>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                    .header {{ text-align: center; margin-bottom: 30px; }}
-                    .section {{ margin-bottom: 20px; }}
-                    .score {{ color: #2c3e50; font-weight: bold; }}
-                    .riesgo-bajo {{ color: #27ae60; }}
-                    .riesgo-medio {{ color: #f39c12; }}
-                    .riesgo-alto {{ color: #c0392b; }}
-                    table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-                    th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-                    th {{ background-color: #f5f5f5; }}
-                </style>
-            </head>
-            <body>
-                <div class='header'>
-                    <h1>Informe de Análisis de Riesgo Crediticio</h1>
-                    <p>Fecha: {informe.FechaAnalisis:dd/MM/yyyy}</p>
-                </div>
-
-                <div class='section'>
-                    <h2>Información del Cliente</h2>
-                    <p>Nombre: {cliente.Nombre} {cliente.Apellido}</p>
-                    <p>CUIT: {cliente.CUIT}</p>
-                </div>
-
-                <div class='section'>
-                    <h2>Resultado del Análisis</h2>
-                    <p>Nivel de Riesgo: <span class='riesgo-{informe.NivelRiesgo.ToLower()}'>{informe.NivelRiesgo}</span></p>
-                    <p>Score Total: <span class='score'>{informe.ScoreTotal:P2}</span></p>
-                </div>
-
-                <div class='section'>
-                    <h2>Desglose de Scores</h2>
-                    <table>
-                        <tr>
-                            <th>Factor</th>
-                            <th>Score</th>
-                        </tr>
-                        <tr>
-                            <td>Historial de Pagos</td>
-                            <td>{informe.ScoreHistorialPagos:P2}</td>
-                        </tr>
-                        <tr>
-                            <td>Situación Financiera</td>
-                            <td>{informe.ScoreSituacionFinanciera:P2}</td>
-                        </tr>
-                        <tr>
-                            <td>Informes Externos</td>
-                            <td>{informe.ScoreInformesExternos:P2}</td>
-                        </tr>
-                        <tr>
-                            <td>Garantías</td>
-                            <td>{informe.ScoreGarantias:P2}</td>
-                        </tr>
-                    </table>
-                </div>
-
-                <div class='section'>
-                    <h2>Recomendaciones</h2>
-                    <p><strong>Justificación:</strong> {informe.Justificacion}</p>
-                    <p><strong>Recomendación de Crédito:</strong> {(informe.RecomendacionOtorgarCredito ? "Aprobado" : "No Aprobado")}</p>
-                    <p><strong>Tasa de Interés Sugerida:</strong> {informe.TasaInteresSugerida:P2}</p>
-                    <p><strong>Garantías Adicionales:</strong> {informe.GarantiasAdicionalesSugeridas}</p>
-                    <p><strong>Plazo Máximo Sugerido:</strong> {informe.PlazoMaximoSugerido} meses</p>
-                </div>
-            </body>
-            </html>";
-
-        // Configurar las opciones de conversión a PDF
-        var doc = new HtmlToPdfDocument()
+        try
         {
-            GlobalSettings = {
-                ColorMode = ColorMode.Color,
-                Orientation = Orientation.Portrait,
-                PaperSize = PaperKind.A4,
-                Margins = new MarginSettings { Top = 10, Bottom = 10, Left = 10, Right = 10 },
-            },
-            Objects = {
-                new ObjectSettings
-                {
-                    PagesCount = true,
-                    HtmlContent = html,
-                    WebSettings = { DefaultEncoding = "utf-8" },
-                    HeaderSettings = { FontSize = 9, Right = "Página [page] de [toPage]", Line = true },
-                    UseLocalLinks = true,
-                    ProduceForms = true,
-                }
-            }
-        };
+            _logger.LogInformation($"Iniciando exportación de informe PDF para el cliente {clienteId}");
 
-        // Convertir HTML a PDF
-        return _converter.Convert(doc);
+            var informe = await GetInformeRiesgoAsync(clienteId);
+            if (informe == null)
+            {
+                throw new Exception($"No se encontró informe de riesgo para el cliente {clienteId}");
+            }
+
+            var cliente = await _context.Clientes
+                .Include(c => c.InformacionFinanciera)
+                .FirstOrDefaultAsync(c => c.Id == clienteId);
+
+            if (cliente == null)
+            {
+                throw new Exception($"Cliente {clienteId} no encontrado");
+            }
+
+            var html = $@"
+                <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                        .header {{ text-align: center; margin-bottom: 30px; }}
+                        .section {{ margin-bottom: 20px; }}
+                        .section-title {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 5px; }}
+                        table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+                        th, td {{ padding: 10px; border: 1px solid #ddd; text-align: left; }}
+                        th {{ background-color: #f5f5f5; }}
+                        .riesgo-bajo {{ color: green; }}
+                        .riesgo-medio {{ color: orange; }}
+                        .riesgo-alto {{ color: red; }}
+                    </style>
+                </head>
+                <body>
+                    <div class='header'>
+                        <h1>Informe de Análisis de Riesgo</h1>
+                        <p>Fecha: {DateTime.Now:dd/MM/yyyy HH:mm}</p>
+                    </div>
+
+                    <div class='section'>
+                        <h2 class='section-title'>Información del Cliente</h2>
+                        <p><strong>Nombre:</strong> {cliente.Nombre} {cliente.Apellido}</p>
+                        <p><strong>Documento:</strong> {cliente.Documento}</p>
+                        <p><strong>Tipo de Cliente:</strong> {cliente.TipoCliente}</p>
+                    </div>
+
+                    <div class='section'>
+                        <h2 class='section-title'>Análisis de Riesgo</h2>
+                        <p>Nivel de Riesgo: <span class='riesgo-{informe.NivelRiesgo.ToLower()}'>{informe.NivelRiesgo}</span></p>
+                        <p>Score Total: {informe.ScoreTotal:P2}</p>
+                        <p><strong>Justificación:</strong> {informe.Justificacion}</p>
+                        <p><strong>Recomendación:</strong> {(informe.RecomendacionOtorgarCredito ? "Aprobado" : "No Aprobado")}</p>
+                        <p><strong>Tasa de Interés Sugerida:</strong> {informe.TasaInteresSugerida:P2}</p>
+                        <p><strong>Garantías Adicionales:</strong> {informe.GarantiasAdicionalesSugeridas}</p>
+                        <p><strong>Plazo Máximo:</strong> {informe.PlazoMaximoSugerido} meses</p>
+                    </div>
+
+                    <div class='section'>
+                        <h2 class='section-title'>Scores Detallados</h2>
+                        <table>
+                            <tr>
+                                <th>Factor</th>
+                                <th>Score</th>
+                            </tr>
+                            <tr>
+                                <td>Historial de Pagos</td>
+                                <td>{informe.ScoreHistorialPagos:P2}</td>
+                            </tr>
+                            <tr>
+                                <td>Situación Financiera</td>
+                                <td>{informe.ScoreSituacionFinanciera:P2}</td>
+                            </tr>
+                            <tr>
+                                <td>Informes Externos</td>
+                                <td>{informe.ScoreInformesExternos:P2}</td>
+                            </tr>
+                            <tr>
+                                <td>Garantías</td>
+                                <td>{informe.ScoreGarantias:P2}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </body>
+                </html>";
+
+            var doc = new HtmlToPdfDocument()
+            {
+                GlobalSettings = {
+                    ColorMode = ColorMode.Color,
+                    Orientation = Orientation.Portrait,
+                    PaperSize = PaperKind.A4,
+                    Margins = new MarginSettings { Top = 10, Bottom = 10, Left = 10, Right = 10 },
+                },
+                Objects = {
+                    new ObjectSettings
+                    {
+                        PagesCount = true,
+                        HtmlContent = html,
+                        WebSettings = { DefaultEncoding = "utf-8" },
+                        HeaderSettings = { FontSize = 9, Right = "Página [page] de [toPage]", Line = true },
+                        UseLocalLinks = true,
+                        ProduceForms = true,
+                    }
+                }
+            };
+
+            var pdfBytes = _converter.Convert(doc);
+            _logger.LogInformation($"Informe PDF generado exitosamente para el cliente {clienteId}");
+            return pdfBytes;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Error al exportar informe PDF para el cliente {clienteId}");
+            throw new Exception($"Error al exportar informe PDF: {ex.Message}", ex);
+        }
     }
 
     private double CalcularScoreHistorialPagos(ICollection<Deuda> deudas)
     {
         if (deudas == null || !deudas.Any())
-            return 0.5; // Score neutral si no hay deudas
+            return 0.5;
 
         var score = 1.0;
-        foreach (var deuda in deudas)
-        {
-            if (deuda.Estado == "Incumplimiento")
-                score -= 0.2;
-            else if (deuda.Estado == "Atraso")
-                score -= 0.1;
-        }
+        var totalDeudas = deudas.Count;
+        var deudasIncumplidas = deudas.Count(d => d.Estado == "Incumplimiento");
+        var deudasAtrasadas = deudas.Count(d => d.Estado == "Atraso");
+
+        // Penalización por incumplimientos
+        score -= (deudasIncumplidas * 0.3) / totalDeudas;
+        
+        // Penalización por atrasos
+        score -= (deudasAtrasadas * 0.15) / totalDeudas;
 
         return Math.Max(0, Math.Min(1, score));
     }
@@ -271,6 +373,13 @@ public class AnalisisRiesgoService : IAnalisisRiesgoService
             else if (info.PatrimonioNeto > 500000) score += 0.1;
         }
 
+        // Análisis de antigüedad
+        if (info.AntiguedadLaboral > 0)
+        {
+            if (info.AntiguedadLaboral >= 5) score += 0.1;
+            else if (info.AntiguedadLaboral >= 2) score += 0.05;
+        }
+
         return Math.Max(0, Math.Min(1, score));
     }
 
@@ -281,53 +390,83 @@ public class AnalisisRiesgoService : IAnalisisRiesgoService
         InformeAFIPDTO afip)
     {
         var score = 0.5;
+        var informesValidos = 0;
 
         // Análisis de Nosis
-        if (nosis.Score == "A") score += 0.1;
-        else if (nosis.Score == "B") score += 0.05;
-        else if (nosis.Score == "C") score -= 0.05;
-        else if (nosis.Score == "D") score -= 0.1;
+        if (nosis != null)
+        {
+            informesValidos++;
+            switch (nosis.Score)
+            {
+                case "A": score += 0.1; break;
+                case "B": score += 0.05; break;
+                case "C": score -= 0.05; break;
+                case "D": score -= 0.1; break;
+            }
+        }
 
         // Análisis de Veraz
-        if (veraz.Score == "A") score += 0.1;
-        else if (veraz.Score == "B") score += 0.05;
-        else if (veraz.Score == "C") score -= 0.05;
-        else if (veraz.Score == "D") score -= 0.1;
+        if (veraz != null)
+        {
+            informesValidos++;
+            switch (veraz.Score)
+            {
+                case "A": score += 0.1; break;
+                case "B": score += 0.05; break;
+                case "C": score -= 0.05; break;
+                case "D": score -= 0.1; break;
+            }
+        }
 
         // Análisis de BCRA
-        if (bcra.Score == "A") score += 0.1;
-        else if (bcra.Score == "B") score += 0.05;
-        else if (bcra.Score == "C") score -= 0.05;
-        else if (bcra.Score == "D") score -= 0.1;
+        if (bcra != null)
+        {
+            informesValidos++;
+            switch (bcra.Score)
+            {
+                case "A": score += 0.1; break;
+                case "B": score += 0.05; break;
+                case "C": score -= 0.05; break;
+                case "D": score -= 0.1; break;
+            }
+        }
 
         // Análisis de AFIP
-        if (afip.Score == "A") score += 0.1;
-        else if (afip.Score == "B") score += 0.05;
-        else if (afip.Score == "C") score -= 0.05;
-        else if (afip.Score == "D") score -= 0.1;
+        if (afip != null)
+        {
+            informesValidos++;
+            switch (afip.Score)
+            {
+                case "A": score += 0.1; break;
+                case "B": score += 0.05; break;
+                case "C": score -= 0.05; break;
+                case "D": score -= 0.1; break;
+            }
+        }
+
+        // Normalizar el score basado en la cantidad de informes válidos
+        if (informesValidos > 0)
+            score = score / informesValidos;
 
         return Math.Max(0, Math.Min(1, score));
     }
 
     private double CalcularScoreGarantias(Cliente cliente)
     {
-        if (cliente == null)
+        if (cliente == null || cliente.Garantias == null || !cliente.Garantias.Any())
             return 0.0;
 
         var score = 0.0;
-        var garantias = _context.Garantias
-            .Where(g => g.ClienteId == cliente.Id)
-            .ToList();
+        var garantiasValidas = cliente.Garantias.Where(g => g.Estado == "Registrada").ToList();
 
-        if (!garantias.Any())
+        if (!garantiasValidas.Any())
             return 0.0;
 
-        foreach (var garantia in garantias)
+        foreach (var garantia in garantiasValidas)
         {
             switch (garantia.Tipo)
             {
                 case "Real":
-                    // Garantías reales (inmuebles, vehículos, etc.)
                     if (garantia.ValorEstimado > 0)
                     {
                         var ratio = garantia.ValorEstimado / garantia.MontoGarantizado;
@@ -338,17 +477,14 @@ public class AnalisisRiesgoService : IAnalisisRiesgoService
                     break;
 
                 case "Personal":
-                    // Garantías personales (aval, fianza, etc.)
                     if (garantia.Avalista != null)
                     {
-                        // Verificar historial crediticio del avalista
                         var avalistaScore = CalcularScoreHistorialPagos(garantia.Avalista.Deudas);
                         score += avalistaScore * 0.2;
                     }
                     break;
 
                 case "Prendaria":
-                    // Garantías prendarias (bienes muebles)
                     if (garantia.ValorEstimado > 0)
                     {
                         var ratio = garantia.ValorEstimado / garantia.MontoGarantizado;
@@ -359,18 +495,13 @@ public class AnalisisRiesgoService : IAnalisisRiesgoService
                     break;
 
                 case "Fiduciaria":
-                    // Garantías fiduciarias
                     score += 0.15;
                     break;
             }
-
-            // Bonificación por garantías registradas
-            if (garantia.Estado == "Registrada")
-                score += 0.1;
         }
 
         // Normalizar el score final
-        return Math.Min(1.0, score);
+        return Math.Min(1.0, score / garantiasValidas.Count);
     }
 
     private string DeterminarNivelRiesgo(double scoreTotal)
@@ -430,5 +561,150 @@ public class AnalisisRiesgoService : IAnalisisRiesgoService
             "Alto" => 12,
             _ => 24
         };
+    }
+
+    public async Task<AnalisisRiesgoResponseDTO> AnalizarRiesgoAsync(AnalisisRiesgoRequestDTO request)
+    {
+        try
+        {
+            // TODO: En el futuro, aquí se integrará con un modelo de ML entrenado
+            var razones = new List<string>();
+            var nivelRiesgo = CalcularNivelRiesgo(request, razones);
+            var recomendacion = DeterminarRecomendacion(nivelRiesgo, request);
+            var condiciones = CalcularCondicionesSugeridas(nivelRiesgo, request);
+
+            return new AnalisisRiesgoResponseDTO
+            {
+                NivelRiesgo = nivelRiesgo,
+                Razones = razones,
+                Recomendacion = recomendacion,
+                CondicionesSugeridas = condiciones,
+                FechaAnalisis = DateTime.UtcNow
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al analizar el riesgo crediticio");
+            throw;
+        }
+    }
+
+    private string CalcularNivelRiesgo(AnalisisRiesgoRequestDTO request, List<string> razones)
+    {
+        var score = 0;
+
+        // Análisis de capacidad de pago
+        if (request.InformacionFinanciera != null)
+        {
+            var ingresosMensuales = request.InformacionFinanciera.IngresosMensuales;
+            var deudaTotal = request.DeudasActuales?.Sum(d => d.MontoMensual) ?? 0;
+            var capacidadPago = ingresosMensuales - deudaTotal;
+            var ratioDeuda = deudaTotal / ingresosMensuales;
+
+            if (ratioDeuda > 0.7m)
+            {
+                score += 3;
+                razones.Add("Alto nivel de endeudamiento actual");
+            }
+            else if (ratioDeuda > 0.5m)
+            {
+                score += 2;
+                razones.Add("Nivel de endeudamiento moderado");
+            }
+            else
+            {
+                score += 1;
+                razones.Add("Bajo nivel de endeudamiento");
+            }
+        }
+
+        // Análisis de garantías
+        var valorGarantias = request.Garantias?.Sum(g => g.ValorEstimado) ?? 0;
+        var ratioGarantias = valorGarantias / request.MontoSolicitado;
+
+        if (ratioGarantias < 1.2m)
+        {
+            score += 3;
+            razones.Add("Garantías insuficientes para el monto solicitado");
+        }
+        else if (ratioGarantias < 1.5m)
+        {
+            score += 2;
+            razones.Add("Garantías moderadas para el monto solicitado");
+        }
+        else
+        {
+            score += 1;
+            razones.Add("Garantías sólidas para el monto solicitado");
+        }
+
+        // Análisis de plazo
+        if (request.PlazoMeses > 60)
+        {
+            score += 2;
+            razones.Add("Plazo de financiamiento extenso");
+        }
+        else if (request.PlazoMeses > 36)
+        {
+            score += 1;
+            razones.Add("Plazo de financiamiento moderado");
+        }
+
+        // Clasificación final
+        if (score >= 6)
+            return "Alto";
+        else if (score >= 3)
+            return "Medio";
+        else
+            return "Bajo";
+    }
+
+    private bool DeterminarRecomendacion(string nivelRiesgo, AnalisisRiesgoRequestDTO request)
+    {
+        return nivelRiesgo switch
+        {
+            "Bajo" => true,
+            "Medio" => request.Garantias?.Any() == true,
+            "Alto" => false,
+            _ => false
+        };
+    }
+
+    private CondicionesSugeridasDTO CalcularCondicionesSugeridas(string nivelRiesgo, AnalisisRiesgoRequestDTO request)
+    {
+        var condiciones = new CondicionesSugeridasDTO
+        {
+            GarantiasAdicionales = new List<string>(),
+            CondicionesEspeciales = new List<string>()
+        };
+
+        switch (nivelRiesgo)
+        {
+            case "Bajo":
+                condiciones.TasaInteresSugerida = 0.15m; // 15% anual
+                condiciones.MontoMaximoSugerido = request.MontoSolicitado;
+                condiciones.PlazoMaximoSugerido = request.PlazoMeses;
+                break;
+
+            case "Medio":
+                condiciones.TasaInteresSugerida = 0.25m; // 25% anual
+                condiciones.MontoMaximoSugerido = request.MontoSolicitado * 0.8m;
+                condiciones.PlazoMaximoSugerido = Math.Min(request.PlazoMeses, 36);
+                condiciones.GarantiasAdicionales.Add("Garantía hipotecaria o prendaria");
+                condiciones.CondicionesEspeciales.Add("Revisión trimestral de estados financieros");
+                break;
+
+            case "Alto":
+                condiciones.TasaInteresSugerida = 0.35m; // 35% anual
+                condiciones.MontoMaximoSugerido = request.MontoSolicitado * 0.5m;
+                condiciones.PlazoMaximoSugerido = Math.Min(request.PlazoMeses, 24);
+                condiciones.GarantiasAdicionales.Add("Garantía hipotecaria");
+                condiciones.GarantiasAdicionales.Add("Aval solidario");
+                condiciones.CondicionesEspeciales.Add("Revisión mensual de estados financieros");
+                condiciones.CondicionesEspeciales.Add("Pago anticipado de intereses");
+                break;
+        }
+
+        return condiciones;
     }
 } 

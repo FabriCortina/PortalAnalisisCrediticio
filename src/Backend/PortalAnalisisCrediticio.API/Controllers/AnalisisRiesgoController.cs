@@ -9,10 +9,29 @@ namespace PortalAnalisisCrediticio.API.Controllers;
 public class AnalisisRiesgoController : ControllerBase
 {
     private readonly IAnalisisRiesgoService _analisisRiesgoService;
+    private readonly ILogger<AnalisisRiesgoController> _logger;
 
-    public AnalisisRiesgoController(IAnalisisRiesgoService analisisRiesgoService)
+    public AnalisisRiesgoController(
+        IAnalisisRiesgoService analisisRiesgoService,
+        ILogger<AnalisisRiesgoController> logger)
     {
         _analisisRiesgoService = analisisRiesgoService;
+        _logger = logger;
+    }
+
+    [HttpPost("analizar")]
+    public async Task<ActionResult<AnalisisRiesgoResponseDTO>> AnalizarRiesgo(AnalisisRiesgoRequestDTO request)
+    {
+        try
+        {
+            var resultado = await _analisisRiesgoService.AnalizarRiesgoAsync(request);
+            return Ok(resultado);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al realizar el análisis de riesgo");
+            return StatusCode(500, "Error interno del servidor al realizar el análisis de riesgo");
+        }
     }
 
     [HttpPost("realizar/{clienteId}")]
