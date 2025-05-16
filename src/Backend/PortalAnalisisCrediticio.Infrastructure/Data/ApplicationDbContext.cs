@@ -10,7 +10,9 @@ namespace PortalAnalisisCrediticio.Infrastructure.Data
         {
         }
 
+        public DbSet<AnalisisCrediticio> AnalisisCrediticios { get; set; }
         public DbSet<Cliente> Clientes { get; set; }
+        public DbSet<Alerta> Alertas { get; set; }
         public DbSet<Compania> Companias { get; set; }
         public DbSet<ClienteCompania> ClienteCompanias { get; set; }
         public DbSet<Empresa> Empresas { get; set; }
@@ -35,16 +37,43 @@ namespace PortalAnalisisCrediticio.Infrastructure.Data
         {
             base.OnModelCreating(modelBuilder);
 
+            // Configuración de AnalisisCrediticio
+            modelBuilder.Entity<AnalisisCrediticio>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.MontoSolicitado).HasPrecision(18, 2);
+                entity.Property(e => e.NivelRiesgo).IsRequired();
+                entity.Property(e => e.Estado).IsRequired();
+
+                entity.HasOne(e => e.Cliente)
+                    .WithMany(c => c.AnalisisCrediticios)
+                    .HasForeignKey(e => e.ClienteId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
             // Configuración de Cliente
             modelBuilder.Entity<Cliente>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.Nombre).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.CUIT_CUIL).IsRequired().HasMaxLength(20);
-                entity.Property(e => e.TipoDocumento).IsRequired().HasMaxLength(20);
-                entity.Property(e => e.Direccion).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Nombre).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.TipoDocumento).IsRequired();
+                entity.Property(e => e.NumeroDocumento).IsRequired();
+                entity.Property(e => e.Email).HasMaxLength(100);
                 entity.Property(e => e.Telefono).HasMaxLength(20);
-                entity.Property(e => e.Email).IsRequired().HasMaxLength(100);
+            });
+
+            // Configuración de Alerta
+            modelBuilder.Entity<Alerta>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Tipo).IsRequired();
+                entity.Property(e => e.Descripcion).IsRequired();
+                entity.Property(e => e.Nivel).IsRequired();
+
+                entity.HasOne(e => e.AnalisisCrediticio)
+                    .WithMany(a => a.Alertas)
+                    .HasForeignKey(e => e.AnalisisCrediticioId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // Configuración de Compania

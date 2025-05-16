@@ -4,17 +4,28 @@ using PortalAnalisisCrediticio.Shared.DTOs;
 
 namespace PortalAnalisisCrediticio.API.Controllers;
 
+/// <summary>
+/// Controlador para la gestión de empresas
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class EmpresasController : ControllerBase
 {
     private readonly IEmpresaService _empresaService;
 
+    /// <summary>
+    /// Constructor del controlador
+    /// </summary>
+    /// <param name="empresaService">Servicio de empresas</param>
     public EmpresasController(IEmpresaService empresaService)
     {
         _empresaService = empresaService;
     }
 
+    /// <summary>
+    /// Obtiene todas las empresas
+    /// </summary>
+    /// <returns>Lista de empresas</returns>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<EmpresaDTO>>> GetAll()
     {
@@ -22,6 +33,11 @@ public class EmpresasController : ControllerBase
         return Ok(empresas);
     }
 
+    /// <summary>
+    /// Obtiene una empresa específica por su ID
+    /// </summary>
+    /// <param name="id">ID de la empresa</param>
+    /// <returns>Datos de la empresa</returns>
     [HttpGet("{id}")]
     public async Task<ActionResult<EmpresaDTO>> GetById(int id)
     {
@@ -32,6 +48,11 @@ public class EmpresasController : ControllerBase
         return Ok(empresa);
     }
 
+    /// <summary>
+    /// Crea una nueva empresa
+    /// </summary>
+    /// <param name="empresaDto">Datos de la empresa</param>
+    /// <returns>Empresa creada</returns>
     [HttpPost]
     public async Task<ActionResult<EmpresaDTO>> Create(EmpresaDTO empresaDto)
     {
@@ -39,6 +60,12 @@ public class EmpresasController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = empresa.Id }, empresa);
     }
 
+    /// <summary>
+    /// Actualiza los datos de una empresa
+    /// </summary>
+    /// <param name="id">ID de la empresa</param>
+    /// <param name="empresaDto">Datos actualizados de la empresa</param>
+    /// <returns>Empresa actualizada</returns>
     [HttpPut("{id}")]
     public async Task<ActionResult<EmpresaDTO>> Update(int id, EmpresaDTO empresaDto)
     {
@@ -49,6 +76,11 @@ public class EmpresasController : ControllerBase
         return Ok(empresa);
     }
 
+    /// <summary>
+    /// Elimina una empresa
+    /// </summary>
+    /// <param name="id">ID de la empresa</param>
+    /// <returns>Sin contenido</returns>
     [HttpDelete("{id}")]
     public async Task<ActionResult> Delete(int id)
     {

@@ -35,7 +35,8 @@ namespace PortalAnalisisCrediticio.Core.Domain.Entities
         public string Email { get; set; }
 
         public DateTime FechaCreacion { get; set; }
-        public DateTime? FechaActualizacion { get; set; }
+        public DateTime UltimaActualizacion { get; set; }
+        public bool Activo { get; set; }
 
         // Relación muchos a muchos con Compañía
         public ICollection<ClienteCompania> ClienteCompanias { get; set; }
@@ -46,5 +47,6 @@ namespace PortalAnalisisCrediticio.Core.Domain.Entities
         public ICollection<InformeRiesgo> InformesRiesgo { get; set; }
         public ICollection<SolicitudProducto> SolicitudesProducto { get; set; }
         public ICollection<InformeExterno> InformesExternos { get; set; }
+        public ICollection<AnalisisCrediticio> AnalisisCrediticios { get; set; }
     }
 } 

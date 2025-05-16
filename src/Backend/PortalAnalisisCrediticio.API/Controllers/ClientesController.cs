@@ -4,17 +4,28 @@ using PortalAnalisisCrediticio.Shared.DTOs;
 
 namespace PortalAnalisisCrediticio.API.Controllers;
 
+/// <summary>
+/// Controlador para la gestión de clientes
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class ClientesController : ControllerBase
 {
     private readonly IClienteService _clienteService;
 
+    /// <summary>
+    /// Constructor del controlador
+    /// </summary>
+    /// <param name="clienteService">Servicio de clientes</param>
     public ClientesController(IClienteService clienteService)
     {
         _clienteService = clienteService;
     }
 
+    /// <summary>
+    /// Obtiene todos los clientes con sus detalles
+    /// </summary>
+    /// <returns>Lista de clientes</returns>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ClienteDTO>>> GetAll()
     {
@@ -22,6 +33,11 @@ public class ClientesController : ControllerBase
         return Ok(clientes);
     }
 
+    /// <summary>
+    /// Obtiene un cliente específico con sus detalles
+    /// </summary>
+    /// <param name="id">ID del cliente</param>
+    /// <returns>Datos del cliente</returns>
     [HttpGet("{id}")]
     public async Task<ActionResult<ClienteDTO>> GetById(int id)
     {
@@ -32,6 +48,11 @@ public class ClientesController : ControllerBase
         return Ok(cliente);
     }
 
+    /// <summary>
+    /// Obtiene el legajo digital de un cliente
+    /// </summary>
+    /// <param name="id">ID del cliente</param>
+    /// <returns>Legajo digital del cliente</returns>
     [HttpGet("{id}/legajo")]
     public async Task<ActionResult<ClienteDTO>> GetLegajoDigital(int id)
     {
@@ -42,6 +63,11 @@ public class ClientesController : ControllerBase
         return Ok(legajo);
     }
 
+    /// <summary>
+    /// Crea un nuevo cliente con sus detalles
+    /// </summary>
+    /// <param name="clienteDto">Datos del cliente</param>
+    /// <returns>Cliente creado</returns>
     [HttpPost]
     public async Task<ActionResult<ClienteDTO>> Create(ClienteDTO clienteDto)
     {
@@ -49,6 +75,12 @@ public class ClientesController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = cliente.Id }, cliente);
     }
 
+    /// <summary>
+    /// Actualiza los datos de un cliente
+    /// </summary>
+    /// <param name="id">ID del cliente</param>
+    /// <param name="clienteDto">Datos actualizados del cliente</param>
+    /// <returns>Cliente actualizado</returns>
     [HttpPut("{id}")]
     public async Task<ActionResult<ClienteDTO>> Update(int id, ClienteDTO clienteDto)
     {
@@ -59,6 +91,11 @@ public class ClientesController : ControllerBase
         return Ok(cliente);
     }
 
+    /// <summary>
+    /// Elimina un cliente
+    /// </summary>
+    /// <param name="id">ID del cliente</param>
+    /// <returns>Sin contenido</returns>
     [HttpDelete("{id}")]
     public async Task<ActionResult> Delete(int id)
     {

@@ -4,17 +4,29 @@ using PortalAnalisisCrediticio.Shared.DTOs.Informes;
 
 namespace PortalAnalisisCrediticio.API.Controllers;
 
+/// <summary>
+/// Controlador para la gestión de informes crediticios
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class InformeController : ControllerBase
 {
     private readonly IInformeService _informeService;
 
+    /// <summary>
+    /// Constructor del controlador
+    /// </summary>
+    /// <param name="informeService">Servicio de informes</param>
     public InformeController(IInformeService informeService)
     {
         _informeService = informeService;
     }
 
+    /// <summary>
+    /// Genera un informe crediticio para un cliente
+    /// </summary>
+    /// <param name="clienteId">ID del cliente</param>
+    /// <returns>Informe crediticio generado</returns>
     [HttpGet("{clienteId}")]
     public async Task<ActionResult<InformeDTO>> GetInforme(int clienteId)
     {
@@ -29,6 +41,11 @@ public class InformeController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Genera un informe crediticio en formato PDF
+    /// </summary>
+    /// <param name="clienteId">ID del cliente</param>
+    /// <returns>Archivo PDF del informe</returns>
     [HttpGet("{clienteId}/pdf")]
     public async Task<IActionResult> GetInformePDF(int clienteId)
     {
@@ -43,6 +60,11 @@ public class InformeController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Obtiene el historial de informes de un cliente
+    /// </summary>
+    /// <param name="clienteId">ID del cliente</param>
+    /// <returns>Historial de informes</returns>
     [HttpGet("{clienteId}/historial")]
     public async Task<ActionResult<IEnumerable<InformeHistoricoDTO>>> GetHistorialInformes(int clienteId)
     {

@@ -4,6 +4,9 @@ using PortalAnalisisCrediticio.Shared.DTOs.CondicionPago;
 
 namespace PortalAnalisisCrediticio.API.Controllers;
 
+/// <summary>
+/// Controlador para la gestión de condiciones de pago
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class CondicionesPagoController : ControllerBase
@@ -11,6 +14,11 @@ public class CondicionesPagoController : ControllerBase
     private readonly ICondicionPagoService _condicionPagoService;
     private readonly ILogger<CondicionesPagoController> _logger;
 
+    /// <summary>
+    /// Constructor del controlador
+    /// </summary>
+    /// <param name="condicionPagoService">Servicio de condiciones de pago</param>
+    /// <param name="logger">Logger para el controlador</param>
     public CondicionesPagoController(
         ICondicionPagoService condicionPagoService,
         ILogger<CondicionesPagoController> logger)
@@ -19,6 +27,10 @@ public class CondicionesPagoController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Obtiene todas las condiciones de pago
+    /// </summary>
+    /// <returns>Lista de condiciones de pago</returns>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<CondicionPagoDTO>>> GetAll()
     {
@@ -34,6 +46,11 @@ public class CondicionesPagoController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Obtiene una condición de pago específica por su ID
+    /// </summary>
+    /// <param name="id">ID de la condición de pago</param>
+    /// <returns>Datos de la condición de pago</returns>
     [HttpGet("{id}")]
     public async Task<ActionResult<CondicionPagoDTO>> GetById(int id)
     {

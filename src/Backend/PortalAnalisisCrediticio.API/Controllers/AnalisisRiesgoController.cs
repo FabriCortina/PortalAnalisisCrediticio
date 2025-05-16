@@ -1,82 +1,97 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PortalAnalisisCrediticio.Core.Interfaces;
-using PortalAnalisisCrediticio.Shared.DTOs.AnalisisRiesgo;
+using PortalAnalisisCrediticio.Shared.DTOs;
 
 namespace PortalAnalisisCrediticio.API.Controllers;
 
+/// <summary>
+/// Controlador para la gestión de análisis de riesgo crediticio
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class AnalisisRiesgoController : ControllerBase
 {
-    private readonly IAnalisisRiesgoService _analisisRiesgoService;
-    private readonly ILogger<AnalisisRiesgoController> _logger;
+    private readonly IAnalisisRiesgoService _analisisService;
+    private readonly ILogService _logService;
 
-    public AnalisisRiesgoController(
-        IAnalisisRiesgoService analisisRiesgoService,
-        ILogger<AnalisisRiesgoController> logger)
+    /// <summary>
+    /// Constructor del controlador
+    /// </summary>
+    /// <param name="analisisService">Servicio de análisis de riesgo</param>
+    /// <param name="logService">Servicio de logs</param>
+    public AnalisisRiesgoController(IAnalisisRiesgoService analisisService, ILogService logService)
     {
-        _analisisRiesgoService = analisisRiesgoService;
-        _logger = logger;
+        _analisisService = analisisService;
+        _logService = logService;
     }
 
-    [HttpPost("analizar")]
-    public async Task<ActionResult<AnalisisRiesgoResponseDTO>> AnalizarRiesgo(AnalisisRiesgoRequestDTO request)
+    /// <summary>
+    /// Realiza un análisis de riesgo para un cliente
+    /// </summary>
+    /// <param name="clienteId">ID del cliente</param>
+    /// <returns>Informe de riesgo</returns>
+    [HttpPost("cliente/{clienteId}")]
+    public async Task<ActionResult<InformeRiesgoDTO>> RealizarAnalisis(int clienteId)
     {
-        try
+        var informe = await _analisisService.RealizarAnalisisRiesgoAsync(clienteId);
+        await _logService.RegistrarLogAsync(new LogDTO
         {
-            var resultado = await _analisisRiesgoService.AnalizarRiesgoAsync(request);
-            return Ok(resultado);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error al realizar el análisis de riesgo");
-            return StatusCode(500, "Error interno del servidor al realizar el análisis de riesgo");
-        }
+            Accion = "Análisis de Riesgo",
+            Detalles = $"Análisis realizado para cliente: {clienteId}",
+            Usuario = User.Identity.Name
+        });
+
+        return Ok(informe);
     }
 
-    [HttpPost("realizar/{clienteId}")]
-    public async Task<ActionResult<InformeRiesgoDTO>> RealizarAnalisisRiesgo(int clienteId)
+    /// <summary>
+    /// Obtiene el último informe de riesgo de un cliente
+    /// </summary>
+    /// <param name="clienteId">ID del cliente</param>
+    /// <returns>Último informe de riesgo</returns>
+    [HttpGet("cliente/{clienteId}/ultimo")]
+    public async Task<ActionResult<InformeRiesgoDTO>> GetUltimoInforme(int clienteId)
     {
-        try
-        {
-            var informe = await _analisisRiesgoService.RealizarAnalisisRiesgoAsync(clienteId);
-            return Ok(informe);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { mensaje = ex.Message });
-        }
+        var informe = await _analisisService.ObtenerUltimoInformeAsync(clienteId);
+        if (informe == null)
+            return NotFound();
+
+        return Ok(informe);
     }
 
-    [HttpGet("{clienteId}")]
-    public async Task<ActionResult<InformeRiesgoDTO>> GetInformeRiesgo(int clienteId)
+    /// <summary>
+    /// Obtiene el historial de informes de riesgo de un cliente
+    /// </summary>
+    /// <param name="clienteId">ID del cliente</param>
+    /// <returns>Historial de informes</returns>
+    [HttpGet("cliente/{clienteId}/historial")]
+    public async Task<ActionResult<IEnumerable<InformeRiesgoDTO>>> GetHistorialInformes(int clienteId)
     {
-        try
-        {
-            var informe = await _analisisRiesgoService.GetInformeRiesgoAsync(clienteId);
-            return Ok(informe);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { mensaje = ex.Message });
-        }
+        var historial = await _analisisService.ObtenerHistorialInformesAsync(clienteId);
+        return Ok(historial);
     }
 
-    [HttpGet("exportar-pdf/{clienteId}")]
-    public async Task<IActionResult> ExportarInformePDF(int clienteId)
+    /// <summary>
+    /// Genera un PDF del informe de riesgo
+    /// </summary>
+    /// <param name="informeId">ID del informe</param>
+    /// <returns>Archivo PDF del informe</returns>
+    [HttpGet("informe/{informeId}/pdf")]
+    public async Task<ActionResult> GenerarPDF(int informeId)
     {
-        try
+        var pdfBytes = await _analisisService.GenerarInformePDFAsync(informeId);
+        if (pdfBytes == null)
+            return NotFound();
+
+        await _logService.RegistrarLogAsync(new LogDTO
         {
-            var pdfBytes = await _analisisRiesgoService.ExportarInformePDFAsync(clienteId);
-            return File(pdfBytes, "application/pdf", $"informe-riesgo-{clienteId}.pdf");
-        }
-        catch (NotImplementedException)
-        {
-            return BadRequest(new { mensaje = "La exportación a PDF aún no está implementada" });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { mensaje = ex.Message });
-        }
+            Accion = "Generar PDF",
+            Detalles = $"PDF generado para informe: {informeId}",
+            Usuario = User.Identity.Name
+        });
+
+        return File(pdfBytes, "application/pdf", $"informe-riesgo-{informeId}.pdf");
     }
 } 

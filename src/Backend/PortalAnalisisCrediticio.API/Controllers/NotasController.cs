@@ -4,6 +4,9 @@ using PortalAnalisisCrediticio.Shared.DTOs.Nota;
 
 namespace PortalAnalisisCrediticio.API.Controllers;
 
+/// <summary>
+/// Controlador para la gestión de notas y comentarios
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class NotasController : ControllerBase
@@ -11,6 +14,11 @@ public class NotasController : ControllerBase
     private readonly INotaService _notaService;
     private readonly ILogger<NotasController> _logger;
 
+    /// <summary>
+    /// Constructor del controlador
+    /// </summary>
+    /// <param name="notaService">Servicio de notas</param>
+    /// <param name="logger">Logger para el controlador</param>
     public NotasController(
         INotaService notaService,
         ILogger<NotasController> logger)
@@ -19,6 +27,10 @@ public class NotasController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Obtiene todas las notas
+    /// </summary>
+    /// <returns>Lista de notas</returns>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<NotaDTO>>> GetAll()
     {
@@ -34,6 +46,11 @@ public class NotasController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Obtiene una nota específica por su ID
+    /// </summary>
+    /// <param name="id">ID de la nota</param>
+    /// <returns>Datos de la nota</returns>
     [HttpGet("{id}")]
     public async Task<ActionResult<NotaDTO>> GetById(int id)
     {

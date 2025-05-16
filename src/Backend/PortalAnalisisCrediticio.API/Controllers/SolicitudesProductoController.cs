@@ -4,17 +4,28 @@ using PortalAnalisisCrediticio.Shared.DTOs;
 
 namespace PortalAnalisisCrediticio.API.Controllers;
 
+/// <summary>
+/// Controlador para la gestión de solicitudes de productos financieros
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class SolicitudesProductoController : ControllerBase
 {
     private readonly ISolicitudProductoService _solicitudService;
 
+    /// <summary>
+    /// Constructor del controlador
+    /// </summary>
+    /// <param name="solicitudService">Servicio de solicitudes de producto</param>
     public SolicitudesProductoController(ISolicitudProductoService solicitudService)
     {
         _solicitudService = solicitudService;
     }
 
+    /// <summary>
+    /// Obtiene todas las solicitudes de productos
+    /// </summary>
+    /// <returns>Lista de solicitudes</returns>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<SolicitudProductoDTO>>> GetAll()
     {
@@ -22,6 +33,10 @@ public class SolicitudesProductoController : ControllerBase
         return Ok(solicitudes);
     }
 
+    /// <summary>
+    /// Obtiene las solicitudes pendientes de aprobación
+    /// </summary>
+    /// <returns>Lista de solicitudes pendientes</returns>
     [HttpGet("pendientes")]
     public async Task<ActionResult<IEnumerable<SolicitudProductoDTO>>> GetPendientes()
     {
@@ -29,6 +44,11 @@ public class SolicitudesProductoController : ControllerBase
         return Ok(solicitudes);
     }
 
+    /// <summary>
+    /// Obtiene las solicitudes de un cliente específico
+    /// </summary>
+    /// <param name="clienteId">ID del cliente</param>
+    /// <returns>Lista de solicitudes del cliente</returns>
     [HttpGet("cliente/{clienteId}")]
     public async Task<ActionResult<IEnumerable<SolicitudProductoDTO>>> GetByClienteId(int clienteId)
     {
@@ -36,6 +56,11 @@ public class SolicitudesProductoController : ControllerBase
         return Ok(solicitudes);
     }
 
+    /// <summary>
+    /// Obtiene una solicitud específica por su ID
+    /// </summary>
+    /// <param name="id">ID de la solicitud</param>
+    /// <returns>Datos de la solicitud</returns>
     [HttpGet("{id}")]
     public async Task<ActionResult<SolicitudProductoDTO>> GetById(int id)
     {
@@ -46,6 +71,11 @@ public class SolicitudesProductoController : ControllerBase
         return Ok(solicitud);
     }
 
+    /// <summary>
+    /// Crea una nueva solicitud de producto
+    /// </summary>
+    /// <param name="solicitudDto">Datos de la solicitud</param>
+    /// <returns>Solicitud creada</returns>
     [HttpPost]
     public async Task<ActionResult<SolicitudProductoDTO>> Create(CreateSolicitudProductoDTO solicitudDto)
     {

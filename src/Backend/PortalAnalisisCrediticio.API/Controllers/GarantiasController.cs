@@ -4,6 +4,9 @@ using PortalAnalisisCrediticio.Shared.DTOs.Garantia;
 
 namespace PortalAnalisisCrediticio.API.Controllers;
 
+/// <summary>
+/// Controlador para la gestión de garantías
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class GarantiasController : ControllerBase
@@ -11,6 +14,11 @@ public class GarantiasController : ControllerBase
     private readonly IGarantiaService _garantiaService;
     private readonly ILogger<GarantiasController> _logger;
 
+    /// <summary>
+    /// Constructor del controlador
+    /// </summary>
+    /// <param name="garantiaService">Servicio de garantías</param>
+    /// <param name="logger">Logger para el controlador</param>
     public GarantiasController(
         IGarantiaService garantiaService,
         ILogger<GarantiasController> logger)
@@ -19,6 +27,10 @@ public class GarantiasController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Obtiene todas las garantías
+    /// </summary>
+    /// <returns>Lista de garantías</returns>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<GarantiaDTO>>> GetAll()
     {
@@ -34,6 +46,11 @@ public class GarantiasController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Obtiene una garantía específica por su ID
+    /// </summary>
+    /// <param name="id">ID de la garantía</param>
+    /// <returns>Datos de la garantía</returns>
     [HttpGet("{id}")]
     public async Task<ActionResult<GarantiaDTO>> GetById(int id)
     {

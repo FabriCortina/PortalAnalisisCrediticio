@@ -7,6 +7,9 @@ using PortalAnalisisCrediticio.Shared.DTOs.Dashboard;
 
 namespace PortalAnalisisCrediticio.API.Controllers
 {
+    /// <summary>
+    /// Controlador para la gestión del dashboard y métricas
+    /// </summary>
     [Authorize]
     [ApiController]
     [Route("api/[controller]")]
@@ -14,11 +17,96 @@ namespace PortalAnalisisCrediticio.API.Controllers
     {
         private readonly IDashboardService _dashboardService;
         private readonly IExportService _exportService;
+        private readonly ILogService _logService;
 
-        public DashboardController(IDashboardService dashboardService, IExportService exportService)
+        /// <summary>
+        /// Constructor del controlador
+        /// </summary>
+        /// <param name="dashboardService">Servicio de dashboard</param>
+        /// <param name="exportService">Servicio de exportación</param>
+        /// <param name="logService">Servicio de logs</param>
+        public DashboardController(IDashboardService dashboardService, IExportService exportService, ILogService logService)
         {
             _dashboardService = dashboardService;
             _exportService = exportService;
+            _logService = logService;
+        }
+
+        /// <summary>
+        /// Obtiene los KPIs principales del dashboard
+        /// </summary>
+        /// <returns>KPIs actualizados</returns>
+        [HttpGet("kpis")]
+        public async Task<ActionResult<KPIsDTO>> GetKPIs()
+        {
+            var kpis = await _dashboardService.GetKPIsAsync();
+            return Ok(kpis);
+        }
+
+        /// <summary>
+        /// Obtiene la distribución de riesgos
+        /// </summary>
+        /// <returns>Distribución de clientes por nivel de riesgo</returns>
+        [HttpGet("distribucion-riesgos")]
+        public async Task<ActionResult<DistribucionRiesgosDTO>> GetDistribucionRiesgos()
+        {
+            var distribucion = await _dashboardService.GetDistribucionRiesgosAsync();
+            return Ok(distribucion);
+        }
+
+        /// <summary>
+        /// Obtiene las solicitudes por mes
+        /// </summary>
+        /// <param name="año">Año a consultar</param>
+        /// <returns>Distribución de solicitudes por mes</returns>
+        [HttpGet("solicitudes-por-mes")]
+        public async Task<ActionResult<SolicitudesPorMesDTO>> GetSolicitudesPorMes([FromQuery] int año)
+        {
+            var solicitudes = await _dashboardService.GetSolicitudesPorMesAsync(año);
+            return Ok(solicitudes);
+        }
+
+        /// <summary>
+        /// Obtiene las alertas activas
+        /// </summary>
+        /// <returns>Lista de alertas</returns>
+        [HttpGet("alertas")]
+        public async Task<ActionResult<IEnumerable<AlertaDTO>>> GetAlertas()
+        {
+            var alertas = await _dashboardService.GetAlertasAsync();
+            return Ok(alertas);
+        }
+
+        /// <summary>
+        /// Exporta los datos del dashboard
+        /// </summary>
+        /// <param name="tipo">Tipo de exportación (Excel/CSV)</param>
+        /// <param name="filtros">Filtros opcionales</param>
+        /// <returns>Archivo con los datos exportados</returns>
+        [HttpGet("exportar")]
+        public async Task<ActionResult> ExportarDatos(
+            [FromQuery] string tipo,
+            [FromQuery] Dictionary<string, string> filtros = null)
+        {
+            var archivo = await _dashboardService.ExportarDatosAsync(tipo, filtros);
+            await _logService.RegistrarLogAsync(new LogDTO
+            {
+                Accion = "Exportar Dashboard",
+                Detalles = $"Exportación de tipo: {tipo}",
+                Usuario = User.Identity.Name
+            });
+
+            return File(archivo, GetContentType(tipo), $"dashboard-export.{tipo.ToLower()}");
+        }
+
+        private string GetContentType(string tipo)
+        {
+            return tipo.ToLower() switch
+            {
+                "excel" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "csv" => "text/csv",
+                _ => "application/octet-stream"
+            };
         }
 
         [HttpGet]
