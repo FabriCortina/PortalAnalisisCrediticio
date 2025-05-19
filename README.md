@@ -670,4 +670,4 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE.md](LICENSE.m
 
 ## 📞 Soporte
 
-Para soporte, email soporte@portal-analisis-crediticio.com o crear un issue en el repositorio. 
+Para soporte crear un issue en el repositorio. 
